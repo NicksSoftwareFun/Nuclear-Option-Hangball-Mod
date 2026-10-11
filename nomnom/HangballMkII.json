@@ -14,11 +14,11 @@
   "artifacts": [
     {
       "fileName": "HangballMkII.dll",
-      "version": "0.5.2",
+      "version": "0.5.3",
       "category": "release",
       "type": "plugin",
       "gameVersion": "0.34.2",
-      "downloadUrl": "https://github.com/NicksSoftwareFun/nuclear-option-hangball-mod/releases/download/v0.5.2/HangballMkII.dll",
+      "downloadUrl": "https://github.com/NicksSoftwareFun/nuclear-option-hangball-mod/releases/download/v0.5.3/HangballMkII.dll",
       "hash": "sha256:FILL_IN_FROM_RELEASE_PAGE",
       "dependencies": [
         { "id": "com.nikkorap.blueprinter", "version": "2.0.1" }

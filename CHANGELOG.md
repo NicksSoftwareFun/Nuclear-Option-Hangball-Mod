@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.3
+- Stops flopping under the chute: the seeker no longer re-checks and re-acquires the target, and the fins stop steering once the chute is open.
+
 ## 0.5.2
 - Antennas unfold when the chute opens instead of at launch.
 

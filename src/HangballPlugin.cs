@@ -6,7 +6,7 @@ namespace HangballMkII
 {
     // Carries the Hangball Mk.II bundle (embedded .nobp, loaded by Blueprinter) plus the runtime patches. Only affects missiles that carry a Parachute
     // child and use OpticalSeeker (the Hangball); stock weapons are untouched.
-    [BepInPlugin("nick.nuclearoption.hangballmkii", "Hangball Mk.II", "0.5.2")]
+    [BepInPlugin("nick.nuclearoption.hangballmkii", "Hangball Mk.II", "0.5.3")]
     [BepInDependency("com.nikkorap.blueprinter", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
@@ -79,9 +79,11 @@ namespace HangballMkII
         }
     }
 
-    // Runs every physics step on the host after the stock guidance.
+    // Runs every physics step on the host in place of / after the stock guidance.
     // Before the chute opens: with a target selected, steer to a point above it and open the chute after passing over it.
-    // After the chute opens: self-destruct on reaching the ground.
+    // After the chute opens: the stock seeker is skipped entirely. It would keep re-checking line of sight to the target
+    // while the missile swings, dropping and re-acquiring it and steering the fins toward it, which kept the missile
+    // flopping under the chute. Instead the missile just hangs, and self-destructs on reaching the ground.
     [HarmonyPatch(typeof(OpticalSeeker), nameof(OpticalSeeker.Seek))]
     internal static class SeekPatch
     {
@@ -94,22 +96,15 @@ namespace HangballMkII
         private static readonly AccessTools.FieldRef<OpticalSeeker, Vector3> KnownVelRef =
             AccessTools.FieldRefAccess<OpticalSeeker, Vector3>("knownVel");
 
-        private static void Postfix(OpticalSeeker __instance)
+        private static bool Prefix(OpticalSeeker __instance)
         {
             Missile missile = MissileRef(__instance);
             if (missile == null || missile.disabled)
-                return;
+                return true;
 
             Parachute chute = Plugin.FindChute(missile);
-            if (chute == null)
-                return;
-
-            if (!chute.IsOpen())
-            {
-                if (TargetRef(__instance) != null)
-                    FlyOverTarget(__instance, missile, chute);
-                return;
-            }
+            if (chute == null || !chute.IsOpen())
+                return true;
 
             if (AntennasOut.Add(missile.GetInstanceID()))
                 missile.DeployFins();
@@ -122,6 +117,21 @@ namespace HangballMkII
                 missile.Arm();
                 missile.Detonate(Vector3.up, hitArmor: false, hitTerrain: true);
             }
+            return false;
+        }
+
+        private static void Postfix(OpticalSeeker __instance)
+        {
+            Missile missile = MissileRef(__instance);
+            if (missile == null || missile.disabled)
+                return;
+
+            Parachute chute = Plugin.FindChute(missile);
+            if (chute == null || chute.IsOpen())
+                return;
+
+            if (TargetRef(__instance) != null)
+                FlyOverTarget(__instance, missile, chute);
         }
 
         // Missiles whose antennas have already been told to unfold (instance IDs are unique per object).
@@ -153,6 +163,21 @@ namespace HangballMkII
             }
 
             missile.SetAimpoint(targetPos + Vector3.up * Plugin.OverflyHeight, KnownVelRef(seeker));
+        }
+    }
+
+    // Under the chute the fins must not steer: zero the autopilot's control inputs so only the hang torque acts.
+    [HarmonyPatch(typeof(Missile), "Steering")]
+    internal static class SteeringPatch
+    {
+        private static readonly AccessTools.FieldRef<Missile, Vector3> InputsRef =
+            AccessTools.FieldRefAccess<Missile, Vector3>("inputs");
+
+        private static void Postfix(Missile __instance)
+        {
+            Parachute chute = Plugin.FindChute(__instance);
+            if (chute != null && chute.IsOpen())
+                InputsRef(__instance) = Vector3.zero;
         }
     }
 }
