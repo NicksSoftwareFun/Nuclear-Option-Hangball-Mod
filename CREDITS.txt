@@ -4,7 +4,7 @@
 
 Nuclear Option and its assets are the property of Shockfront Studios. This project is not affiliated with or endorsed by Shockfront Studios.
 
-The Hangball Mk.II is based on the stock Eyeball Mk.II. Its in-game bundle uses the stock Eyeball body mesh and a sample of the stock missile body texture, and reuses the game's own materials, shaders, parachute and pylon.
+The Hangball Mk.II is a variant of the stock Eyeball Mk.II. Its model and textures are original, made to match the look of the game's AGM-48 family. The bundle ships no game assets; at load time Blueprinter points it at the game's own shaders, effects, sounds, parachute and pylon.
 
 ## Third-party software
 
@@ -15,8 +15,9 @@ The Hangball Mk.II is based on the stock Eyeball Mk.II. Its in-game bundle uses 
 | [Blueprinter](https://github.com/nikkorap/NOBlueprinter-Releases) | nikkorap | See its repository | Loads the embedded `.nobp` bundle (runtime dependency, not redistributed) |
 | [Blender](https://www.blender.org/) / bpy | Blender Foundation | GPL-2.0-or-later | Modelling and rendering tool (not redistributed) |
 | [Pillow](https://python-pillow.org/) | Pillow contributors | MIT-CMU | Texture painting tool (not redistributed) |
+| [NumPy](https://numpy.org/) | NumPy developers | BSD-3-Clause | Texture painting tool (not redistributed) |
 | [DejaVu Sans Bold](https://dejavu-fonts.github.io/) | DejaVu fonts team | Bitstream Vera / public domain | "HANG" lettering painted into the texture |
 
 ## Hangball Mk.II
 
-Model, textures, plugin and scripts by NicksSoftwareFun, released under the [MIT License](LICENSE) (game-derived content excepted, see above).
+Model, textures, plugin and scripts by NicksSoftwareFun, released under the [MIT License](LICENSE).

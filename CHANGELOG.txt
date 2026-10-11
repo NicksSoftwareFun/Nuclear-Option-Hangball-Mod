@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.4
+- All-original model and textures: new airframe (blunt tail, long-chord tail fins with strakes, long forward fins) and procedural paint in the AGM-48 style. No game meshes or textures are shipped.
+- Single material for the whole missile.
+- New weapon icon.
+
 ## 0.5.3
 - Stops flopping under the chute: the seeker no longer re-checks and re-acquires the target, and the fins stop steering once the chute is open.
 

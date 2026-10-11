@@ -3,7 +3,7 @@
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>HangballMkII</AssemblyName>
     <RootNamespace>HangballMkII</RootNamespace>
-    <Version>0.5.3</Version>
+    <Version>0.5.4</Version>
     <LangVersion>latest</LangVersion>
     <Optimize>true</Optimize>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
@@ -12,8 +12,8 @@
     <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
     <BepInExCore>$(GameDir)\BepInEx\core</BepInExCore>
     <!-- Blueprinter bundle built by the Unity Mod Builder, copied next to this file before building. -->
-    <NobpFile Condition="'$(NobpFile)' == ''">HangballMkII_0.4.1.nobp</NobpFile>
-    <NobpResourceName Condition="'$(NobpResourceName)' == ''">HangballMkII.Hangball Mk.II_0.4.1.nobp</NobpResourceName>
+    <NobpFile Condition="'$(NobpFile)' == ''">HangballMkII_0.5.0.nobp</NobpFile>
+    <NobpResourceName Condition="'$(NobpResourceName)' == ''">HangballMkII.Hangball Mk.II_0.5.0.nobp</NobpResourceName>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="$(NobpFile)" Condition="Exists('$(NobpFile)')">
