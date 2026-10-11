@@ -91,9 +91,9 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 # ---- airframe: round tube, boat tail and nozzle, all on the Hangball material
 # (lofted from a profile of (radius, z) stations, nose forward; v along the length, u around)
 SEG_B = 48
-TUBE = [(R_BODY, 0.700), (R_BODY, 0.255), (R_BODY, -0.325), (R_BODY, -0.620)]
+TUBE = [(R_BODY, 0.700), (R_BODY, 0.255), (R_BODY, -0.325), (R_BODY, -0.700)]
 # body texture v: the stretch hidden under the chute pack gets only a sliver of the texture
-TUBE_V = [(-0.620, 0.0), (-0.325, 0.40), (0.255, 0.42), (0.700, 1.0)]
+TUBE_V = [(-0.700, 0.0), (-0.325, 0.42), (0.255, 0.44), (0.700, 1.0)]
 
 
 def tube_v(z):
@@ -102,9 +102,10 @@ def tube_v(z):
             return va + (vb - va) * (z - za) / (zb - za)
     return 1.0
 
-BOAT = [(R_BODY, -0.620), (0.084, -0.670), (0.072, -0.725)]
-NOZZLE = [(0.072, -0.725), (0.064, -0.730), (0.064, -0.778), (0.061, -0.785), (0.050, -0.785), (0.044, -0.760), (0.0, -0.760)]
-TAIL_SHARP = {(0.072, -0.725), (0.064, -0.730), (0.061, -0.785), (0.050, -0.785)}
+# blunt tail: a raised collar that carries the fins, a chamfer, then a flat base with a recessed ring and a centre cap
+TAIL_PROF = [(R_BODY, -0.700), (0.094, -0.703), (0.094, -0.742), (0.090, -0.745), (0.084, -0.766),
+             (0.071, -0.766), (0.066, -0.754), (0.042, -0.754), (0.042, -0.762), (0.0, -0.762)]
+TAIL_SHARP = {(0.094, -0.703), (0.094, -0.742), (0.084, -0.766), (0.071, -0.766), (0.066, -0.754), (0.042, -0.754), (0.042, -0.762)}
 
 
 def lathe(bm, uvl, prof, region, v_of):
@@ -123,47 +124,51 @@ def lathe(bm, uvl, prof, region, v_of):
     return rings
 
 
-def fin(bm, uvl, angle, root, tip_r, tip, thick, region):
-    """Flat trapezoid fin. root = (z_le, z_te) at the body, tip = (z_le, z_te) at radius tip_r.
-    The edges are tapered: a full-thickness core with knife edges at the leading and trailing edges."""
-    r0 = R_BODY - 0.004
+def fin(bm, uvl, angle, stations, thick, region):
+    """Flat fin from span stations [(r, z_le, z_te)], root first (r below R_BODY so it sits in the skin).
+    Each station is a hexagon section: full thickness in the middle, knife edges at the leading and trailing edges."""
     c, s = math.cos(angle), math.sin(angle)
     ox, oy = -s, c   # thickness direction
-    span = [(r0, root), (tip_r, tip)]
+    r0, r1 = stations[0][0], stations[-1][0]
+    z_min = min(zt for _, _, zt in stations)
+    z_max = max(zl for _, zl, _ in stations)
     def pt(r, z, t):
         return bm.verts.new((r * c + t * ox, r * s + t * oy, z))
-    cols = []
-    for r, (zl, zt) in span:
-        ch = zl - zt
-        cols.append([pt(r, zl, 0.0), pt(r, zl - 0.25 * ch, thick / 2), pt(r, zt + 0.25 * ch, thick / 2), pt(r, zt, 0.0),
-                     pt(r, zt + 0.25 * ch, -thick / 2), pt(r, zl - 0.25 * ch, -thick / 2)])
-    (ia, ib) = cols
     def uv(r, z):
-        (zl0, zt0), (zl1, zt1) = root, tip
-        return remap(region, (r - r0) / (tip_r - r0), (z - min(zt0, zt1)) / (max(zl0, zl1) - min(zt0, zt1)))
-    for k in range(6):
-        f = bm.faces.new([ia[k], ib[k], ib[(k + 1) % 6], ia[(k + 1) % 6]])
-        f.smooth = False
-        for loop in f.loops:
-            co = loop.vert.co
-            loop[uvl].uv = uv(co.x * c + co.y * s, co.z)
-    f = bm.faces.new(list(reversed(ib)))
+        return remap(region, (r - r0) / (r1 - r0), (z - z_min) / (z_max - z_min))
+    cols = []
+    for r, zl, zt in stations:
+        ch = zl - zt
+        e = min(0.25 * ch, 0.03)
+        cols.append([pt(r, zl, 0.0), pt(r, zl - e, thick / 2), pt(r, zt + e, thick / 2), pt(r, zt, 0.0),
+                     pt(r, zt + e, -thick / 2), pt(r, zl - e, -thick / 2)])
+    for ia, ib in zip(cols, cols[1:]):
+        for k in range(6):
+            f = bm.faces.new([ia[k], ib[k], ib[(k + 1) % 6], ia[(k + 1) % 6]])
+            f.smooth = False
+            for loop in f.loops:
+                co = loop.vert.co
+                loop[uvl].uv = uv(co.x * c + co.y * s, co.z)
+    f = bm.faces.new(list(reversed(cols[-1])))
     f.smooth = False
     for loop in f.loops:
-        loop[uvl].uv = uv(tip_r, loop.vert.co.z)
-
+        loop[uvl].uv = uv(r1, loop.vert.co.z)
 
 bm = bmesh.new()
 uvl = bm.loops.layers.uv.new('UVMap')
 lathe(bm, uvl, TUBE, BODY, lambda i, z, n: tube_v(z))
-lathe(bm, uvl, BOAT + NOZZLE[1:], TAIL, lambda i, z, n: 1.0 - i / (n - 1))
+lathe(bm, uvl, TAIL_PROF, TAIL, lambda i, z, n: 1.0 - i / (n - 1))
 for f in bm.faces:
     f.smooth = True
 # X-layout control surfaces (45 deg off the antenna channels, which sit on the +/-X sides)
 for q in range(4):
     a = math.radians(45 + 90 * q)
-    fin(bm, uvl, a, (-0.440, -0.615), 0.168, (-0.555, -0.615), 0.006, FIN)
-    fin(bm, uvl, a, (0.505, 0.380), 0.132, (0.420, 0.390), 0.005, FIN)
+    r0 = R_BODY - 0.004
+    # long-chord tail fin running to the base, its trailing tip clipped, with a low strake ahead of it
+    fin(bm, uvl, a, [(r0, -0.455, -0.766), (0.150, -0.565, -0.766), (0.172, -0.605, -0.718)], 0.008, FIN)
+    fin(bm, uvl, a, [(r0, -0.340, -0.470), (0.106, -0.440, -0.470)], 0.012, FIN)
+    # long, low forward fin
+    fin(bm, uvl, a, [(r0, 0.590, 0.330), (0.138, 0.515, 0.345)], 0.006, FIN)
 bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
 body = new_obj('Body', bm, ['Hangball'], smooth=None)
 

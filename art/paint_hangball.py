@@ -12,11 +12,12 @@ random.seed(7)
 rng = np.random.default_rng(7)
 
 
-def noise(w, h, cell):
-    """Smooth value noise in -1..1 with features about `cell` pixels across."""
-    g = rng.uniform(-1, 1, (h // cell + 2, w // cell + 2)).astype(np.float32)
-    img = Image.fromarray(((g + 1) * 127.5).astype(np.uint8)).resize((w + 2 * cell, h + 2 * cell), Image.BICUBIC)
-    return np.asarray(img, np.float32)[cell:cell + h, cell:cell + w] / 127.5 - 1
+def noise(w, h, cell, cell_y=None):
+    """Smooth value noise in -1..1 with features about `cell` pixels across (`cell_y` tall, for streaks)."""
+    cy = cell_y or cell
+    g = rng.uniform(-1, 1, (h // cy + 3, w // cell + 3)).astype(np.float32)
+    img = Image.fromarray(((g + 1) * 127.5).astype(np.uint8)).resize(((w // cell + 3) * cell, (h // cy + 3) * cy), Image.BICUBIC)
+    return np.asarray(img, np.float32)[cy:cy + h, cell:cell + w] / 127.5 - 1
 
 
 def gunmetal(w, h, level=55):
@@ -52,7 +53,7 @@ WIRE = (0.75, 0.5, 1.0, 0.75)
 BODY = (0.0, 0.0, 0.5, 0.5)
 FIN = (0.5, 0.0, 0.75, 0.5)
 TAIL = (0.75, 0.0, 1.0, 0.5)
-TUBE_V = [(-0.620, 0.0), (-0.325, 0.40), (0.255, 0.42), (0.700, 1.0)]   # body tube z -> v, as in build_hangball.py
+TUBE_V = [(-0.700, 0.0), (-0.325, 0.42), (0.255, 0.44), (0.700, 1.0)]   # body tube z -> v, as in build_hangball.py
 FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 
 
@@ -179,18 +180,6 @@ draw.rectangle((x0, ya, x1, yb), fill=(222, 175, 30))
 for i in range(250):
     draw.point((random.randint(x0, x1), random.randint(ya, yb)), fill=(90, 90, 90))
 mdraw.rectangle((x0, ya, x1, yb), fill=(0, 0, 0, 90))
-# HANG-01 stencil on both upper sides, between the antenna channel and the canard, reading along the length
-# texture density differs around (u) and along (v), so the text is drawn large and resized to its real size:
-# 0.13 m long, 0.022 m tall
-font = ImageFont.truetype(FONT, 64)
-len_px = zy(0.325 - 0.065) - zy(0.325 + 0.065)
-tall_px = int(0.022 / (2 * math.pi * 0.090) * bw)
-for deg, rot in ((22, -90), (158, 90)):
-    txt = Image.new('RGBA', (360, 80), (0, 0, 0, 0))
-    ImageDraw.Draw(txt).text((180, 40), 'HANG-01', font=font, fill=(205, 205, 200, 255), anchor='mm')
-    txt = txt.resize((len_px, tall_px), Image.LANCZOS).rotate(rot, expand=True)
-    cxp = x0 + int(deg / 360 * bw)
-    albedo.paste(txt, (cxp - txt.width // 2, zy(0.325) - txt.height // 2), txt)
 # a lifting-lug plate on top (u = 0.25)
 cxp = x0 + bw // 4
 for z in (-0.53, 0.42):
@@ -200,7 +189,7 @@ for z in (-0.53, 0.42):
 
 # ---- fins: u = span (0 root .. 1 tip), v = chord; slightly lighter metal, a darker root fillet and edge wear
 x0, y0, x1, y1 = box(FIN)
-albedo.paste(gunmetal(x1 - x0, y1 - y0, 60), (x0, y0))
+albedo.paste(gunmetal(x1 - x0, y1 - y0, 48), (x0, y0))
 draw.rectangle((x0, y0, x0 + 14, y1), fill=(30, 30, 30))
 draw.line((x1 - 3, y0, x1 - 3, y1), fill=(92, 92, 92), width=4)
 
@@ -218,9 +207,70 @@ x0, y0, x1, y1 = box(WIRE)
 draw.rectangle((x0, y0, x1, y1), fill=(150, 152, 155))
 mdraw.rectangle((x0, y0, x1, y1), fill=(220, 220, 220, 160))
 
+# ---- weathering over the painted metal: grime, streaks along the length, chipped paint down to bare steel,
+# scratches and pitting. Strength per region; the wire and the dome lenses get little or none.
+A = np.asarray(albedo, np.float32).copy()
+M = np.asarray(metal, np.float32).copy()
+H = np.zeros((S, S), np.float32)          # height for the normal map, 0 = painted surface
+WEATHER = [(PACK, 1.0), (COLLAR, 0.7), (BODY, 1.0), (FIN, 0.6), (TAIL, 1.2), (BAND, 0.8), (DOME, 0.35)]
+for region, k in WEATHER:
+    x0, y0, x1, y1 = box(region)
+    w, h = x1 - x0, y1 - y0
+    a, m, hh = A[y0:y1, x0:x1], M[y0:y1, x0:x1], H[y0:y1, x0:x1]
+    # grime: dark patches and streaks running along v (image y is along the length on every region but the dome)
+    grime = np.clip(0.55 * noise(w, h, 40) + 0.3 * noise(w, h, 10) + 0.45 * noise(w, h, 6, 70) - 0.05, 0, 1)
+    a *= (1 - 0.45 * k * grime)[..., None]
+    m[..., 3] -= 60 * k * grime                     # grime is rougher
+    # chipped paint: bare steel showing through, clustered along a noise field
+    field = noise(w, h, 60) * 0.5 + noise(w, h, 9) * 0.35 + noise(w, h, 3) * 0.25
+    chip = field > (0.62 - 0.08 * k)
+    rim = (field > (0.57 - 0.08 * k)) & ~chip       # dark lip round each chip
+    steel = 118 + 18 * noise(w, h, 4)
+    a[chip] = np.stack([steel[chip] * 0.98, steel[chip], steel[chip] * 1.03], -1)
+    a[rim] *= 0.55
+    m[chip] = (210, 210, 210, 150)
+    hh[chip] -= 0.6
+    # pitting
+    n_pits = int(w * h * 0.0025 * k)
+    py, px = rng.integers(0, h, n_pits), rng.integers(0, w, n_pits)
+    a[py, px] *= 0.5
+    hh[py, px] -= 0.8
+    # scratches: thin bright lines through the paint
+    scr = Image.new('L', (w, h), 0)
+    sd = ImageDraw.Draw(scr)
+    for _ in range(int(w * h / 1800 * k)):
+        x, y = random.uniform(0, w), random.uniform(0, h)
+        ang = random.gauss(math.pi / 2, 0.5) if random.random() < 0.6 else random.uniform(0, math.pi)
+        ln = random.uniform(6, 60)
+        sd.line((x, y, x + ln * math.cos(ang), y + ln * math.sin(ang)), fill=random.randint(90, 255), width=1)
+    sv = np.asarray(scr, np.float32) / 255
+    a += (sv * 70)[..., None]
+    m[..., 0] += sv * 150
+    hh -= sv * 0.5
+    # dents: broad, shallow
+    hh += 1.2 * k * noise(w, h, 28)
+A = np.clip(A, 0, 255)
+M = np.clip(M, 0, 255)
+albedo = Image.fromarray(A.astype(np.uint8))
+metal = Image.fromarray(M.astype(np.uint8), 'RGBA')
+
+# normal map (OpenGL / Unity convention, green = +v) from the height field plus the painted detail
+# (seams, rivets and bolt heads read as raised or sunk from their brightness against the local average)
+lum = A.mean(axis=2)
+blur = np.asarray(Image.fromarray(lum.astype(np.uint8)).filter(ImageFilter.GaussianBlur(5)), np.float32)
+H += (lum - blur) / 40.0
+H = np.asarray(Image.fromarray(((H + 8) * 16).clip(0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.7)), np.float32) / 16
+dx = (np.roll(H, -1, 1) - np.roll(H, 1, 1)) * 0.9
+dy = (np.roll(H, -1, 0) - np.roll(H, 1, 0)) * 0.9
+n = np.stack([-dx, dy, np.ones_like(H)], -1)
+n /= np.linalg.norm(n, axis=-1, keepdims=True)
+wx0, wy0, wx1, wy1 = box(WIRE)
+n[wy0:wy1, wx0:wx1] = (0, 0, 1)
+normal = Image.fromarray(((n * 0.5 + 0.5) * 255).astype(np.uint8))
+
 albedo.save(f'{ART}/hangball_b.png')
 metal.save(f'{ART}/hangball_m.png')
-Image.new('RGBA', (S, S), (128, 128, 255, 255)).save(f'{ART}/hangball_n.png')
+normal.save(f'{ART}/hangball_n.png')
 Image.new('RGBA', (S, S), (255, 255, 255, 255)).save(f'{ART}/hangball_ao.png')
 Image.new('RGBA', (S, S), (0, 0, 0, 255)).save(f'{ART}/hangball_c.png')
 print('painted')

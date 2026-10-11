@@ -17,6 +17,8 @@ for name, t in TEX.items():
         nt.links.new(sep.outputs[0], b.inputs['Metallic'])
         inv = nt.nodes.new('ShaderNodeMath'); inv.operation = 'SUBTRACT'; inv.inputs[0].default_value = 1
         nt.links.new(mi.outputs['Alpha'], inv.inputs[1]); nt.links.new(inv.outputs[0], b.inputs['Roughness'])
+        ni = nt.nodes.new('ShaderNodeTexImage'); ni.image = bpy.data.images.load(f'{ART}/{t}_n.png'); ni.image.colorspace_settings.name = 'Non-Color'
+        nm = nt.nodes.new('ShaderNodeNormalMap'); nt.links.new(ni.outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
     except Exception as e: print(e)
 # group everything under a pivot so we can orient: file z = nose
 piv = bpy.data.objects.new('Pivot', None); sc.collection.objects.link(piv)
