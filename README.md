@@ -28,8 +28,6 @@ When a target is selected, it flies over the target and deploys a parachute, han
 - Torques the missile nose-down under the chute and damps the swing.
 - Detonates on touchdown.
 
-![Double pylon](docs/images/double_pylon.png)
-
 ## Credits and licence
 
 See [CREDITS.md](CREDITS.md). The plugin source and art scripts are released under the [MIT License](LICENSE).
