@@ -1,16 +1,37 @@
-# Paints the Hangball Mk.II texture atlas (1024x1024) from the stock Eyeball body texture.
+# Paints the Hangball Mk.II texture atlas (1024x1024). Everything is generated here; no game textures are used.
 # Regions (u0, v0, u1, v1), v up; must match build_hangball.py.
-# Usage: python3 paint_hangball.py <folder with missiles1_b.png>
+# Usage: python3 paint_hangball.py <output folder>
 import math, random, sys
-from PIL import Image, ImageDraw, ImageFont
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 ART = sys.argv[1] if len(sys.argv) > 1 else '.'
 S = 1024
 random.seed(7)
 
-base = Image.open(f'{ART}/missiles1_b.png').convert('RGB')
-# Stock body mid-section lives at u .67-.909, v .001-.267; this strip has no lettering.
-grunge = base.crop((343, 375, 368, 512))
+rng = np.random.default_rng(7)
+
+
+def noise(w, h, cell):
+    """Smooth value noise in -1..1 with features about `cell` pixels across."""
+    g = rng.uniform(-1, 1, (h // cell + 2, w // cell + 2)).astype(np.float32)
+    img = Image.fromarray(((g + 1) * 127.5).astype(np.uint8)).resize((w + 2 * cell, h + 2 * cell), Image.BICUBIC)
+    return np.asarray(img, np.float32)[cell:cell + h, cell:cell + w] / 127.5 - 1
+
+
+def gunmetal(w, h, level=55):
+    """Dark grey worn gunmetal: soft mottling, fine grain, faint streaks along the length and light scratches."""
+    a = level + 6 * noise(w, h, 64) + 4 * noise(w, h, 16) + 3 * rng.normal(0, 1, (h, w))
+    a += 3 * np.asarray(Image.fromarray(rng.normal(128, 40, (h, w // 4 + 1)).clip(0, 255).astype(np.uint8))
+                        .resize((w, h), Image.BILINEAR), np.float32)[:, :w] / 128 - 3
+    img = Image.fromarray(a.clip(0, 255).astype(np.uint8)).convert('RGB')
+    d = ImageDraw.Draw(img)
+    for _ in range(w * h // 9000):
+        x, y = random.randint(0, w), random.randint(0, h)
+        ang, ln = random.uniform(0, math.pi), random.randint(4, 22)
+        c = level + random.randint(12, 28)
+        d.line((x, y, x + ln * math.cos(ang), y + ln * math.sin(ang)), fill=(c, c, c), width=1)
+    return img.filter(ImageFilter.GaussianBlur(0.4))
 
 albedo = Image.new('RGB', (S, S), (40, 40, 40))
 metal = Image.new('RGBA', (S, S), (20, 20, 20, 110))   # R metallic, A smoothness
@@ -28,41 +49,21 @@ COLLAR = (0.5, 0.75, 0.75, 1.0)
 DOME = (0.75, 0.75, 1.0, 1.0)
 BAND = (0.5, 0.5, 0.75, 0.75)
 WIRE = (0.75, 0.5, 1.0, 0.75)
+BODY = (0.0, 0.0, 0.5, 0.5)
+FIN = (0.5, 0.0, 0.75, 0.5)
+TAIL = (0.75, 0.0, 1.0, 0.5)
+TUBE_V = [(-0.620, 0.0), (-0.325, 0.40), (0.255, 0.42), (0.700, 1.0)]   # body tube z -> v, as in build_hangball.py
 FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
 
 
-def fill_grunge(rect, tiles_x, darken=1.0):
+def fill_grunge(rect, tiles_x=1, darken=1.0):
     x0, y0, x1, y1 = rect
-    w = (x1 - x0) // tiles_x
-    for i in range(tiles_x):
-        tile = grunge.transpose(Image.FLIP_LEFT_RIGHT) if i % 2 else grunge
-        tile = tile.resize((w, y1 - y0), Image.BILINEAR)
-        if darken != 1.0:
-            tile = tile.point(lambda p: int(p * darken))
-        albedo.paste(tile, (x0 + i * w, y0))
+    albedo.paste(gunmetal(x1 - x0, y1 - y0, int(55 * darken)), (x0, y0))
 
 
 def rivet(d, x, y, r=3, col=(95, 95, 95)):
     d.ellipse((x - r, y - r, x + r, y + r), fill=(25, 25, 25))
     d.ellipse((x - r + 1, y - r + 1, x + r - 1, y + r - 1), fill=col)
-
-
-def camera_pod(x, y, r):
-    # bezel ring, dark lens with blue tint, glint
-    draw.ellipse((x - r - 4, y - r - 4, x + r + 4, y + r + 4), fill=(22, 22, 22))
-    draw.ellipse((x - r - 2, y - r - 2, x + r + 2, y + r + 2), fill=(120, 122, 124))
-    draw.ellipse((x - r, y - r, x + r, y + r), fill=(18, 26, 34))
-    for k in range(r, 0, -1):
-        t = k / r
-        c = (int(18 + 30 * (1 - t)), int(30 + 50 * (1 - t)), int(42 + 70 * (1 - t)))
-        draw.ellipse((x - k, y - k, x + k, y + k), fill=c)
-    draw.ellipse((x - r * 0.35, y - r * 0.35, x + r * 0.35, y + r * 0.35), fill=(8, 10, 14))
-    draw.ellipse((x - r * 0.55, y - r * 0.65, x - r * 0.15, y - r * 0.3), fill=(200, 220, 235))
-    for ang in (45, 135, 225, 315):
-        a = math.radians(ang)
-        rivet(draw, x + (r + 7) * math.cos(a), y + (r + 7) * math.sin(a), 2)
-    mdraw.ellipse((x - r - 2, y - r - 2, x + r + 2, y + r + 2), fill=(180, 180, 180, 150))
-    mdraw.ellipse((x - r, y - r, x + r, y + r), fill=(0, 0, 0, 245))
 
 
 # ---- pack: 8 faces side by side (u), length along v (v=1 is the front of the pack)
@@ -146,6 +147,71 @@ for i in range(400):
     xx, yy = random.randint(x0, x1), random.randint(yb, y1)
     draw.point((xx, yy), fill=(90, 90, 90))
 mdraw.rectangle((x0, yb, x1, y1), fill=(0, 0, 0, 90))
+
+# ---- body tube: u around (0 = +X side, counter-clockwise looking from the nose's back), v along z
+x0, y0, x1, y1 = box(BODY)
+fill_grunge((x0, y0, x1, y1))
+bw, bh = x1 - x0, y1 - y0
+
+
+def zy(z):
+    v = 1.0
+    for (za, va), (zb, vb) in zip(TUBE_V, TUBE_V[1:]):
+        if z <= zb + 1e-9:
+            v = va + (vb - va) * (z - za) / (zb - za)
+            break
+    return y1 - int(v * bh)
+
+
+
+
+# panel seams around the tube with a rivet row either side
+for z in (-0.47, 0.285, 0.56):
+    yy = zy(z)
+    draw.line((x0, yy, x1, yy), fill=(16, 16, 16), width=2)
+    draw.line((x0, yy + 2, x1, yy + 2), fill=(78, 78, 78), width=1)
+    for xx in range(x0 + 6, x1, 22):
+        rivet(draw, xx, yy - 6, 2)
+        rivet(draw, xx, yy + 8, 2)
+# yellow ring behind the pack, ahead of the tail fins
+ya, yb = zy(-0.400), zy(-0.425)
+draw.rectangle((x0, ya, x1, yb), fill=(222, 175, 30))
+for i in range(250):
+    draw.point((random.randint(x0, x1), random.randint(ya, yb)), fill=(90, 90, 90))
+mdraw.rectangle((x0, ya, x1, yb), fill=(0, 0, 0, 90))
+# HANG-01 stencil on both upper sides, between the antenna channel and the canard, reading along the length
+# texture density differs around (u) and along (v), so the text is drawn large and resized to its real size:
+# 0.13 m long, 0.022 m tall
+font = ImageFont.truetype(FONT, 64)
+len_px = zy(0.325 - 0.065) - zy(0.325 + 0.065)
+tall_px = int(0.022 / (2 * math.pi * 0.090) * bw)
+for deg, rot in ((22, -90), (158, 90)):
+    txt = Image.new('RGBA', (360, 80), (0, 0, 0, 0))
+    ImageDraw.Draw(txt).text((180, 40), 'HANG-01', font=font, fill=(205, 205, 200, 255), anchor='mm')
+    txt = txt.resize((len_px, tall_px), Image.LANCZOS).rotate(rot, expand=True)
+    cxp = x0 + int(deg / 360 * bw)
+    albedo.paste(txt, (cxp - txt.width // 2, zy(0.325) - txt.height // 2), txt)
+# a lifting-lug plate on top (u = 0.25)
+cxp = x0 + bw // 4
+for z in (-0.53, 0.42):
+    draw.rectangle((cxp - 10, zy(z) - 14, cxp + 10, zy(z) + 14), fill=(34, 34, 34))
+    rivet(draw, cxp, zy(z) - 8, 2)
+    rivet(draw, cxp, zy(z) + 8, 2)
+
+# ---- fins: u = span (0 root .. 1 tip), v = chord; slightly lighter metal, a darker root fillet and edge wear
+x0, y0, x1, y1 = box(FIN)
+albedo.paste(gunmetal(x1 - x0, y1 - y0, 60), (x0, y0))
+draw.rectangle((x0, y0, x0 + 14, y1), fill=(30, 30, 30))
+draw.line((x1 - 3, y0, x1 - 3, y1), fill=(92, 92, 92), width=4)
+
+# ---- tail: boat tail into the nozzle, v = 1 at the tube joint down to the nozzle throat; heat-darkened at the end
+x0, y0, x1, y1 = box(TAIL)
+t = gunmetal(x1 - x0, y1 - y0, 52)
+fade = np.linspace(1.0, 0.35, y1 - y0)[:, None, None] ** 1.5
+albedo.paste(Image.fromarray((np.asarray(t, np.float32) * fade).astype(np.uint8)), (x0, y0))
+th = y1 - y0
+draw.line((x0, y0 + int(th * 0.30), x1, y0 + int(th * 0.30)), fill=(16, 16, 16), width=2)
+mdraw.rectangle((x0, y0 + int(th * 0.4), x1, y1), fill=(60, 60, 60, 60))
 
 # ---- wire: plain steel
 x0, y0, x1, y1 = box(WIRE)

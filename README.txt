@@ -4,7 +4,7 @@
 
 When a target is selected, it flies over the target and deploys a parachute, hanging to scan and spot for Datalink as it descends. Without a target, the Hangball deploys the chute when it runs out of energy instead of self-destructing.
 
-![Antenna deployment](docs/images/antenna_deploy.gif)
+![Hangball Mk.II](docs/images/1_stowed_3q.png)
 
 ## Requirements
 
@@ -30,4 +30,4 @@ When a target is selected, it flies over the target and deploys a parachute, han
 
 ## Credits and licence
 
-See [CREDITS.md](CREDITS.md). The plugin source and art scripts are released under the [MIT License](LICENSE).
+See [CREDITS.txt](CREDITS.txt). The plugin source and art scripts are released under the [MIT License](LICENSE).

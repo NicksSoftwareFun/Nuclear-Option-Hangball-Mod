@@ -5,7 +5,7 @@ from mathutils import Vector
 ART, OUT = sys.argv[sys.argv.index('--') + 1:][:2] if '--' in sys.argv else sys.argv[1:3]
 bpy.ops.wm.open_mainfile(filepath=f'{ART}/hangball.blend')
 sc = bpy.context.scene
-TEX = {'Missiles1': 'missiles1', 'Weapons5': 'weapons5', 'Hangball': 'hangball'}
+TEX = {'Hangball': 'hangball'}
 for name, t in TEX.items():
     m = bpy.data.materials[name]; m.use_nodes = True
     nt = m.node_tree; b = nt.nodes['Principled BSDF']
@@ -46,10 +46,11 @@ def deploy(on):
         a.rotation_euler = (0, math.radians(90 * sgn) if on else 0, 0)
 shots = [('1_stowed_3q', False, (1.7, 1.9, 0.9)), ('2_deployed_3q', True, (1.9, 1.6, 1.4)),
          ('3_side', False, (2.6, 0, 0.05)), ('3b_other_side', False, (-2.6, 0, 0.05)), ('4_top_deployed', True, (0, -0.02, 3.4)),
-         ('5_nose_closeup', False, (0.55, 1.35, 0.3)), ('6_pack_closeup', False, (-0.75, 0.25, 0.35)), ('7_hinge_stowed', False, (0.42, -0.62, 0.16)), ('8_hinge_deployed', True, (0.42, -0.62, 0.16))]
+         ('5_nose_closeup', False, (0.55, 1.35, 0.3)), ('6_pack_closeup', False, (-0.75, 0.25, 0.35)), ('7_hinge_stowed', False, (0.42, -0.62, 0.16)), ('8_hinge_deployed', True, (0.42, -0.62, 0.16)),
+         ('9_tail', False, (0.95, -2.05, 0.45))]
 for name, dep, loc in shots:
     deploy(dep)
-    tgt = (0, 0.75, 0) if 'nose' in name else ((0, -0.05, 0) if 'pack' in name else ((0.11, -0.28, 0) if 'hinge' in name else (0, 0, 0)))
+    tgt = (0, 0.75, 0) if 'nose' in name else ((0, -0.55, 0) if 'tail' in name else ((0, -0.05, 0) if 'pack' in name else ((0.11, -0.28, 0) if 'hinge' in name else (0, 0, 0))))
     look(loc, tgt)
     sc.render.filepath = f'{OUT}/{name}.png'
     bpy.ops.render.render(write_still=True)
