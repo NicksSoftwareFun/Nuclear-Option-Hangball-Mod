@@ -20,19 +20,22 @@ def noise(w, h, cell, cell_y=None):
     return np.asarray(img, np.float32)[cy:cy + h, cell:cell + w] / 127.5 - 1
 
 
-def gunmetal(w, h, level=55):
-    """Dark grey worn gunmetal: soft mottling, fine grain, faint streaks along the length and light scratches."""
-    a = level + 6 * noise(w, h, 64) + 4 * noise(w, h, 16) + 3 * rng.normal(0, 1, (h, w))
-    a += 3 * np.asarray(Image.fromarray(rng.normal(128, 40, (h, w // 4 + 1)).clip(0, 255).astype(np.uint8))
-                        .resize((w, h), Image.BILINEAR), np.float32)[:, :w] / 128 - 3
+def gunmetal(w, h, level=52):
+    """Matte mid-grey missile paint in the house style of the game's standard missile bodies: very even tone,
+    faint mottling, and sparse small light-grey scuffs where the paint is worn."""
+    a = level + 2.5 * noise(w, h, 48) + 1.5 * noise(w, h, 8) + 1.2 * rng.normal(0, 1, (h, w))
     img = Image.fromarray(a.clip(0, 255).astype(np.uint8)).convert('RGB')
     d = ImageDraw.Draw(img)
-    for _ in range(w * h // 20000):
-        x, y = random.randint(0, w), random.randint(0, h)
-        ang, ln = random.uniform(0, math.pi), random.randint(4, 22)
-        c = level + random.randint(6, 14)
-        d.line((x, y, x + ln * math.cos(ang), y + ln * math.sin(ang)), fill=(c, c, c), width=1)
-    return img.filter(ImageFilter.GaussianBlur(0.4))
+    for _ in range(w * h // 1400):                    # scuffs: little flecks and short scrapes
+        x, y = random.uniform(0, w), random.uniform(0, h)
+        c = random.randint(level + 18, level + 48)
+        if random.random() < 0.6:
+            r = random.uniform(0.6, 1.8)
+            d.ellipse((x - r, y - r * random.uniform(0.5, 1.5), x + r, y + r), fill=(c, c, c))
+        else:
+            ang, ln = random.uniform(0, math.pi), random.uniform(3, 10)
+            d.line((x, y, x + ln * math.cos(ang), y + ln * math.sin(ang)), fill=(c, c, c), width=1)
+    return img.filter(ImageFilter.GaussianBlur(0.5))
 
 albedo = Image.new('RGB', (S, S), (40, 40, 40))
 metal = Image.new('RGBA', (S, S), (20, 20, 20, 110))   # R metallic, A smoothness
@@ -137,16 +140,16 @@ for i in range(6):
 for i in range(6):
     aperture(math.radians(74), math.radians(60 * i), 0.17)
 
-# ---- bands: v=0 rear .. v=1 front: yellow stripe, then a body-metal ring up to the dome
+# ---- bands: v=0 rear .. v=1 front: yellow stripe, then a black ring up to the dome
 x0, y0, x1, y1 = box(BAND)
 h = y1 - y0
 yb = y0 + int(h * 0.42)
-fill_grunge((x0, y0, x1, yb), 4)
-draw.line((x0, yb - 2, x1, yb - 2), fill=(20, 20, 20), width=3)   # seam where the stripe meets the ring
-draw.rectangle((x0, yb, x1, y1), fill=(222, 175, 30))
-for i in range(400):
+draw.rectangle((x0, y0, x1, yb), fill=(22, 22, 22))   # black ring up to the dome
+draw.rectangle((x0, yb, x1, y1), fill=(226, 178, 58))
+for i in range(50):
     xx, yy = random.randint(x0, x1), random.randint(yb, y1)
-    draw.point((xx, yy), fill=(90, 90, 90))
+    r = random.uniform(0.6, 1.4)
+    draw.ellipse((xx - r, yy - r, xx + r, yy + r), fill=(158, 125, 40))
 mdraw.rectangle((x0, yb, x1, y1), fill=(0, 0, 0, 90))
 
 # ---- body tube: u around (0 = +X side, counter-clockwise looking from the nose's back), v along z
@@ -166,32 +169,39 @@ def zy(z):
 
 
 
-# panel seams around the tube with a rivet row either side
-for z in (-0.47, 0.285, 0.56):
+# thin section joints, no rivets
+for z in (-0.47, 0.56):
     yy = zy(z)
-    draw.line((x0, yy, x1, yy), fill=(16, 16, 16), width=2)
-    draw.line((x0, yy + 2, x1, yy + 2), fill=(78, 78, 78), width=1)
-    for xx in range(x0 + 6, x1, 22):
-        rivet(draw, xx, yy - 6, 2)
-        rivet(draw, xx, yy + 8, 2)
-# yellow ring behind the pack, ahead of the tail fins
-ya, yb = zy(-0.400), zy(-0.425)
-draw.rectangle((x0, ya, x1, yb), fill=(222, 175, 30))
-for i in range(250):
-    draw.point((random.randint(x0, x1), random.randint(ya, yb)), fill=(90, 90, 90))
-mdraw.rectangle((x0, ya, x1, yb), fill=(0, 0, 0, 90))
+    draw.line((x0, yy, x1, yy), fill=(30, 30, 30), width=2)
+
+
+def band(za, zb, col, wear=40):
+    ya, yb = zy(za), zy(zb)
+    draw.rectangle((x0, ya, x1, yb), fill=col)
+    for i in range(wear):   # worn spots showing the grey underneath
+        xx, yy = random.randint(x0, x1), random.randint(ya, yb)
+        r = random.uniform(0.6, 1.4)
+        draw.ellipse((xx - r, yy - r, xx + r, yy + r), fill=tuple(int(c * 0.7) for c in col))
+    mdraw.rectangle((x0, ya, x1, yb), fill=(0, 0, 0, 100))
+
+
+band(-0.400, -0.425, (205, 100, 22))          # orange band behind the pack, ahead of the tail fins
+band(0.300, 0.282, (178, 180, 182), 60)       # light-grey ring at the forward joint
 # a lifting-lug plate on top (u = 0.25)
 cxp = x0 + bw // 4
 for z in (-0.53, 0.42):
-    draw.rectangle((cxp - 10, zy(z) - 14, cxp + 10, zy(z) + 14), fill=(34, 34, 34))
-    rivet(draw, cxp, zy(z) - 8, 2)
-    rivet(draw, cxp, zy(z) + 8, 2)
+    draw.rectangle((cxp - 10, zy(z) - 14, cxp + 10, zy(z) + 14), fill=(40, 40, 40))
 
 # ---- fins: u = span (0 root .. 1 tip), v = chord; slightly lighter metal, a darker root fillet and edge wear
 x0, y0, x1, y1 = box(FIN)
-albedo.paste(gunmetal(x1 - x0, y1 - y0, 48), (x0, y0))
-draw.rectangle((x0, y0, x0 + 14, y1), fill=(30, 30, 30))
-draw.line((x1 - 3, y0, x1 - 3, y1), fill=(92, 92, 92), width=4)
+albedo.paste(gunmetal(x1 - x0, y1 - y0, 78), (x0, y0))
+fw, fh = x1 - x0, y1 - y0
+draw.rectangle((x0, y0, x0 + 10, y1), fill=(52, 52, 52))
+for fx in (0.35, 0.7):
+    draw.line((x0 + int(fw * fx), y0, x0 + int(fw * fx), y1), fill=(58, 58, 58), width=2)
+for fy in (0.3, 0.65):
+    draw.line((x0, y0 + int(fh * fy), x1, y0 + int(fh * fy)), fill=(58, 58, 58), width=2)
+mdraw.rectangle((x0, y0, x1, y1), fill=(90, 90, 90, 120))
 
 # ---- tail: boat tail into the nozzle, v = 1 at the tube joint down to the nozzle throat; heat-darkened at the end
 x0, y0, x1, y1 = box(TAIL)
@@ -207,11 +217,11 @@ x0, y0, x1, y1 = box(WIRE)
 draw.rectangle((x0, y0, x1, y1), fill=(150, 152, 155))
 mdraw.rectangle((x0, y0, x1, y1), fill=(220, 220, 220, 160))
 
-# ---- weathering over the painted metal: grime, streaks along the length, light scratches and shallow dents. Strength per region; the wire and the dome lenses get little or none.
+# ---- light weathering over the paint: faint grime, a few scratches and very shallow dents. Strength per region; the wire and the dome lenses get little or none.
 A = np.asarray(albedo, np.float32).copy()
 M = np.asarray(metal, np.float32).copy()
 H = np.zeros((S, S), np.float32)          # height for the normal map, 0 = painted surface
-WEATHER = [(PACK, 1.0), (COLLAR, 0.7), (BODY, 1.0), (FIN, 0.6), (TAIL, 1.2), (BAND, 0.8), (DOME, 0.35)]
+WEATHER = [(PACK, 0.25), (COLLAR, 0.2), (BODY, 0.25), (FIN, 0.15), (TAIL, 0.4), (BAND, 0.1), (DOME, 0.1)]
 for region, k in WEATHER:
     x0, y0, x1, y1 = box(region)
     w, h = x1 - x0, y1 - y0
@@ -233,7 +243,7 @@ for region, k in WEATHER:
     m[..., 0] += sv * 60
     hh -= sv * 0.25
     # dents: broad, shallow
-    hh += 0.8 * k * noise(w, h, 28)
+    hh += 0.3 * k * noise(w, h, 28)
 A = np.clip(A, 0, 255)
 M = np.clip(M, 0, 255)
 albedo = Image.fromarray(A.astype(np.uint8))
@@ -243,7 +253,7 @@ metal = Image.fromarray(M.astype(np.uint8), 'RGBA')
 # (seams, rivets and bolt heads read as raised or sunk from their brightness against the local average)
 lum = A.mean(axis=2)
 blur = np.asarray(Image.fromarray(lum.astype(np.uint8)).filter(ImageFilter.GaussianBlur(5)), np.float32)
-H += (lum - blur) / 40.0
+H += (lum - blur) / 90.0
 H = np.asarray(Image.fromarray(((H + 8) * 16).clip(0, 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.7)), np.float32) / 16
 dx = (np.roll(H, -1, 1) - np.roll(H, 1, 1)) * 0.9
 dy = (np.roll(H, -1, 0) - np.roll(H, 1, 0)) * 0.9
