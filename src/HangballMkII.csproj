@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>HangballMkII</AssemblyName>
+    <RootNamespace>HangballMkII</RootNamespace>
+    <Version>0.5.2</Version>
+    <LangVersion>latest</LangVersion>
+    <Optimize>true</Optimize>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Nuclear Option install folder. Override with: dotnet build -c Release -p:GameDir="D:\Games\Nuclear Option" -->
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
+    <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
+    <BepInExCore>$(GameDir)\BepInEx\core</BepInExCore>
+    <!-- Blueprinter bundle built by the Unity Mod Builder, copied next to this file before building. -->
+    <NobpFile Condition="'$(NobpFile)' == ''">HangballMkII_0.4.1.nobp</NobpFile>
+    <NobpResourceName Condition="'$(NobpResourceName)' == ''">HangballMkII.Hangball Mk.II_0.4.1.nobp</NobpResourceName>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="$(NobpFile)" Condition="Exists('$(NobpFile)')">
+      <LogicalName>$(NobpResourceName)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="$(ManagedDir)\Assembly-CSharp.dll" Private="false" />
+    <Reference Include="$(ManagedDir)\Mirage.dll" Private="false" />
+    <Reference Include="$(ManagedDir)\UniTask.dll" Private="false" />
+    <Reference Include="$(ManagedDir)\UnityEngine.dll" Private="false" />
+    <Reference Include="$(ManagedDir)\UnityEngine.CoreModule.dll" Private="false" />
+    <Reference Include="$(ManagedDir)\UnityEngine.PhysicsModule.dll" Private="false" />
+    <Reference Include="$(ManagedDir)\netstandard.dll" Private="false" />
+    <Reference Include="$(BepInExCore)\BepInEx.dll" Private="false" />
+    <Reference Include="$(BepInExCore)\0Harmony.dll" Private="false" />
+  </ItemGroup>
+  <Target Name="WarnMissingBundle" BeforeTargets="Build" Condition="!Exists('$(NobpFile)')">
+    <Warning Text="$(NobpFile) not found next to the project. The DLL will build without the Hangball Mk.II bundle." />
+  </Target>
+</Project>

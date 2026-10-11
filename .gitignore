@@ -1,0 +1,10 @@
+bin/
+obj/
+*.nobp
+*.blend
+*.blend1
+# game files exported for the art scripts; never commit these
+art/in/
+*.obj
+missiles1_*
+weapons5_*
