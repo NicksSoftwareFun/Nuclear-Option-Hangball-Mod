@@ -6,7 +6,7 @@ namespace HangballMkII
 {
     // Carries the Hangball Mk.II bundle (embedded .nobp, loaded by Blueprinter) plus the runtime patches. Only affects missiles that carry a Parachute
     // child and use OpticalSeeker (the Hangball); stock weapons are untouched.
-    [BepInPlugin("nick.nuclearoption.hangballmkii", "Hangball Mk.II", "0.5.6")]
+    [BepInPlugin("nick.nuclearoption.hangballmkii", "Hangball Mk.II", "1.0.0")]
     [BepInDependency("com.nikkorap.blueprinter", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {

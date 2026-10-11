@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.6
+## 1.0.0
 - The chute opens after 15 km of flight even with a target selected.
 - If the target is lost (destroyed or removed), the chute opens right away.
 
