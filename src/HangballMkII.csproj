@@ -3,7 +3,7 @@
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>HangballMkII</AssemblyName>
     <RootNamespace>HangballMkII</RootNamespace>
-    <Version>0.5.4</Version>
+    <Version>0.5.5</Version>
     <LangVersion>latest</LangVersion>
     <Optimize>true</Optimize>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>

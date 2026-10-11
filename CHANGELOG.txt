@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.5
+- No more yaw spin under the chute; the canopy and lines stay steady while hanging nose-down.
+- With no target selected, the chute opens automatically after 15 km of flight.
+
 ## 0.5.4
 - All-original model and textures: new airframe (blunt tail, long-chord tail fins with strakes, long forward fins) and procedural paint in the AGM-48 style. No game meshes or textures are shipped.
 - Single material for the whole missile.
