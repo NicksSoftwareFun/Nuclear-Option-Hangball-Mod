@@ -1,7 +1,6 @@
-# Builds the Hangball Mk.II model in Blender (bpy / Blender 5.2) from the stock Eyeball mesh and the concept art.
+# Builds the Hangball Mk.II model in Blender (bpy / Blender 5.2) from the concept art. All geometry is original.
 # File space = Unity local space with X negated (z = forward/nose, y = up). Units are meters.
-# Inputs:  <ART>/agm_scanner1.obj (exported from Unity, X negated)
-# Outputs: hangball.blend, hangball_body.obj (materials Missiles1, Weapons5, Hangball),
+# Outputs: hangball.blend, hangball_body.obj (one material, Hangball),
 #          hangball_antenna.obj (origin at hinge, wire along +Z = stowed pointing at the nose)
 # Usage:   blender -b -P build_hangball.py -- <ART folder>
 import bpy, bmesh, math, sys
@@ -25,6 +24,9 @@ COLLAR = (0.5, 0.75, 0.75, 1.0)
 DOME = (0.75, 0.75, 1.0, 1.0)
 BAND = (0.5, 0.5, 0.75, 0.75)
 WIRE = (0.75, 0.5, 1.0, 0.75)
+BODY = (0.0, 0.0, 0.5, 0.5)
+FIN = (0.5, 0.0, 0.75, 0.5)
+TAIL = (0.75, 0.0, 1.0, 0.5)
 
 OCT = 8
 OCT_ROT = math.pi / 8   # flats face up/down/left/right, like the concept
@@ -43,8 +45,9 @@ def new_obj(name, bm, mats, smooth=False):
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     bm.free()
-    for p in me.polygons:
-        p.use_smooth = smooth
+    if smooth is not None:
+        for p in me.polygons:
+            p.use_smooth = smooth
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
     for m in mats:
@@ -69,32 +72,6 @@ def read_obj(path):
     return V, VT, F
 
 
-bpy.ops.wm.read_factory_settings(use_empty=True)
-
-# ---- stock body, original UVs and game materials
-V, VT, F = read_obj(f'{ART}/agm_scanner1.obj')
-# Flatten the two stock side fairings (z 0.44-0.56, out to r 0.115 on the +/-X sides) onto the body
-# skin so the stowed HF wires (x = +/-WIRE_OFFSET) pass clear of them.
-FAIR_Z0, FAIR_Z1 = 0.44, 0.56
-for i, (x, y, z) in enumerate(V):
-    r = math.hypot(x, y)
-    if FAIR_Z0 <= z <= FAIR_Z1 and r > R_BODY and abs(y) <= 0.5 * abs(x):
-        V[i] = (x * R_BODY / r, y * R_BODY / r, z)
-bm = bmesh.new()
-uvl = bm.loops.layers.uv.new('UVMap')
-verts = [bm.verts.new(v) for v in V]
-mat_index = {'Missiles1': 0, 'Weapons5': 1}
-for m, face in F:
-    try:
-        f = bm.faces.new([verts[i] for i, _ in face])
-    except ValueError:
-        continue
-    f.material_index = mat_index[m]
-    for loop, (_, t) in zip(f.loops, face):
-        loop[uvl].uv = VT[t]
-body = new_obj('Body', bm, ['Missiles1', 'Weapons5'], smooth=True)
-
-
 def ring(bm, r, z, n=OCT, rot=OCT_ROT):
     return [bm.verts.new((r * math.cos(rot + 2 * math.pi * s / n), r * math.sin(rot + 2 * math.pi * s / n), z)) for s in range(n + 1)]
 
@@ -106,6 +83,94 @@ def skin(bm, uvl, ra, rb, region, va, vb, n=OCT):
         uvs = [(s / n, va), (s / n, vb), ((s + 1) / n, vb), ((s + 1) / n, va)]
         for loop, (u, v) in zip(f.loops, uvs):
             loop[uvl].uv = remap(region, u, v)
+
+
+
+bpy.ops.wm.read_factory_settings(use_empty=True)
+
+# ---- airframe: round tube, boat tail and nozzle, all on the Hangball material
+# (lofted from a profile of (radius, z) stations, nose forward; v along the length, u around)
+SEG_B = 48
+TUBE = [(R_BODY, 0.700), (R_BODY, 0.255), (R_BODY, -0.325), (R_BODY, -0.700)]
+# body texture v: the stretch hidden under the chute pack gets only a sliver of the texture
+TUBE_V = [(-0.700, 0.0), (-0.325, 0.42), (0.255, 0.44), (0.700, 1.0)]
+
+
+def tube_v(z):
+    for (za, va), (zb, vb) in zip(TUBE_V, TUBE_V[1:]):
+        if z <= zb + 1e-9:
+            return va + (vb - va) * (z - za) / (zb - za)
+    return 1.0
+
+# blunt tail: a raised collar that carries the fins, a chamfer, then a flat base with a recessed ring and a centre cap
+TAIL_PROF = [(R_BODY, -0.700), (0.094, -0.703), (0.094, -0.742), (0.090, -0.745), (0.084, -0.766),
+             (0.071, -0.766), (0.066, -0.754), (0.042, -0.754), (0.042, -0.762), (0.0, -0.762)]
+TAIL_SHARP = {(0.094, -0.703), (0.094, -0.742), (0.084, -0.766), (0.071, -0.766), (0.066, -0.754), (0.042, -0.754), (0.042, -0.762)}
+
+
+def lathe(bm, uvl, prof, region, v_of):
+    rings = []
+    for i, (r, z) in enumerate(prof):
+        rg = ring(bm, max(r, 1e-5), z, SEG_B, 0.0)
+        rings.append((rg, v_of(i, z, len(prof)), (r, z) in TAIL_SHARP))
+    for (ra, va, _), (rb, vb, sharp) in zip(rings, rings[1:]):
+        skin(bm, uvl, ra, rb, region, va, vb, SEG_B)
+    for rg, _, sharp in rings:
+        if sharp:
+            for a, b in zip(rg, rg[1:]):
+                e = bm.edges.get((a, b))
+                if e:
+                    e.smooth = False
+    return rings
+
+
+def fin(bm, uvl, angle, stations, thick, region):
+    """Flat fin from span stations [(r, z_le, z_te)], root first (r below R_BODY so it sits in the skin).
+    Each station is a hexagon section: full thickness in the middle, knife edges at the leading and trailing edges."""
+    c, s = math.cos(angle), math.sin(angle)
+    ox, oy = -s, c   # thickness direction
+    r0, r1 = stations[0][0], stations[-1][0]
+    z_min = min(zt for _, _, zt in stations)
+    z_max = max(zl for _, zl, _ in stations)
+    def pt(r, z, t):
+        return bm.verts.new((r * c + t * ox, r * s + t * oy, z))
+    def uv(r, z):
+        return remap(region, (r - r0) / (r1 - r0), (z - z_min) / (z_max - z_min))
+    cols = []
+    for r, zl, zt in stations:
+        ch = zl - zt
+        e = min(0.25 * ch, 0.03)
+        cols.append([pt(r, zl, 0.0), pt(r, zl - e, thick / 2), pt(r, zt + e, thick / 2), pt(r, zt, 0.0),
+                     pt(r, zt + e, -thick / 2), pt(r, zl - e, -thick / 2)])
+    for ia, ib in zip(cols, cols[1:]):
+        for k in range(6):
+            f = bm.faces.new([ia[k], ib[k], ib[(k + 1) % 6], ia[(k + 1) % 6]])
+            f.smooth = False
+            for loop in f.loops:
+                co = loop.vert.co
+                loop[uvl].uv = uv(co.x * c + co.y * s, co.z)
+    f = bm.faces.new(list(reversed(cols[-1])))
+    f.smooth = False
+    for loop in f.loops:
+        loop[uvl].uv = uv(r1, loop.vert.co.z)
+
+bm = bmesh.new()
+uvl = bm.loops.layers.uv.new('UVMap')
+lathe(bm, uvl, TUBE, BODY, lambda i, z, n: tube_v(z))
+lathe(bm, uvl, TAIL_PROF, TAIL, lambda i, z, n: 1.0 - i / (n - 1))
+for f in bm.faces:
+    f.smooth = True
+# X-layout control surfaces (45 deg off the antenna channels, which sit on the +/-X sides)
+for q in range(4):
+    a = math.radians(45 + 90 * q)
+    r0 = R_BODY - 0.004
+    # long-chord tail fin running to the base, its trailing tip clipped, with a low strake ahead of it
+    fin(bm, uvl, a, [(r0, -0.455, -0.766), (0.150, -0.565, -0.766), (0.172, -0.605, -0.718)], 0.008, FIN)
+    fin(bm, uvl, a, [(r0, -0.340, -0.470), (0.106, -0.440, -0.470)], 0.012, FIN)
+    # long, low forward fin
+    fin(bm, uvl, a, [(r0, 0.590, 0.330), (0.138, 0.515, 0.345)], 0.006, FIN)
+bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+body = new_obj('Body', bm, ['Hangball'], smooth=None)
 
 
 # ---- octagonal chute pack with a recessed antenna channel down each side flat (+X and -X)
@@ -174,7 +239,7 @@ for sx in (1, -1):
         (max(sx * GROOVE_FLOOR, sx * (WIRE_OFFSET + 0.006)), -0.0045, Z_PANEL_FRONT + 0.004), steel)
 pack = new_obj('ChutePack', bm, ['Hangball'])
 
-# ---- glass dome over the stock nose, black/yellow band behind it
+# ---- sensor dome on the nose, black/yellow band behind it
 bm = bmesh.new()
 uvl = bm.loops.layers.uv.new('UVMap')
 SEG, ROWS = 32, 10
@@ -267,6 +332,6 @@ def write_obj(path, objects, mat_order, at_origin=False):
     open(path, 'w').write('\n'.join(out) + '\n')
 
 
-write_obj(f'{ART}/hangball_body.obj', [body, pack, nose], ['Missiles1', 'Weapons5', 'Hangball'])
+write_obj(f'{ART}/hangball_body.obj', [body, pack, nose], ['Hangball'])
 write_obj(f'{ART}/hangball_antenna.obj', [ant_l], ['Hangball'], at_origin=True)
 print('built')

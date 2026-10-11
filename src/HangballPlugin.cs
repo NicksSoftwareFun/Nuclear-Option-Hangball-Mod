@@ -6,7 +6,7 @@ namespace HangballMkII
 {
     // Carries the Hangball Mk.II bundle (embedded .nobp, loaded by Blueprinter) plus the runtime patches. Only affects missiles that carry a Parachute
     // child and use OpticalSeeker (the Hangball); stock weapons are untouched.
-    [BepInPlugin("nick.nuclearoption.hangballmkii", "Hangball Mk.II", "0.5.3")]
+    [BepInPlugin("nick.nuclearoption.hangballmkii", "Hangball Mk.II", "1.0.0")]
     [BepInDependency("com.nikkorap.blueprinter", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
@@ -21,9 +21,18 @@ namespace HangballMkII
         internal const float HangAlignAccel = 8f;   // rad/s^2 of correction per unit of sin(tilt from vertical)
         internal const float HangDamping = 5f;      // 1/s, opposes any rotation (swing and spin)
 
+        // Fraction of the spin about the vertical removed every physics step under the chute. The stock chute pulls the
+        // belly toward the lines (it is written for bombs that hang level), which makes a nose-down missile keep yawing.
+        internal const float HangSpinKill = 0.8f;
+
+        // The chute opens once the missile has flown this far (m), with or without a target.
+        internal const float ChuteDeployDistance = 15000f;
+
         private void Awake()
         {
-            new Harmony("nick.nuclearoption.hangballmkii").PatchAll(typeof(Plugin).Assembly);
+            var harmony = new Harmony("nick.nuclearoption.hangballmkii");
+            harmony.PatchAll(typeof(Plugin).Assembly);
+            ChuteVisuals.Patch(harmony, Logger);
             Logger.LogInfo("Hangball Mk.II patches applied");
         }
 
@@ -80,7 +89,8 @@ namespace HangballMkII
     }
 
     // Runs every physics step on the host in place of / after the stock guidance.
-    // Before the chute opens: with a target selected, steer to a point above it and open the chute after passing over it.
+    // Before the chute opens: open it after 15 km of flight, or right away if the target is lost. With a target selected,
+    // steer to a point above it and open the chute after passing over it.
     // After the chute opens: the stock seeker is skipped entirely. It would keep re-checking line of sight to the target
     // while the missile swings, dropping and re-acquiring it and steering the fins toward it, which kept the missile
     // flopping under the chute. Instead the missile just hangs, and self-destructs on reaching the ground.
@@ -130,9 +140,33 @@ namespace HangballMkII
             if (chute == null || chute.IsOpen())
                 return;
 
-            if (TargetRef(__instance) != null)
+            int id = missile.GetInstanceID();
+            DistanceFlown.TryGetValue(id, out float flown);
+            flown += missile.speed * Time.fixedDeltaTime;
+            DistanceFlown[id] = flown;
+            if (flown >= Plugin.ChuteDeployDistance)
+            {
+                chute.DeployChute();
+                return;
+            }
+
+            Unit target = TargetRef(__instance);
+            if (target != null && !target.disabled)
+            {
+                HadTarget.Add(id);
                 FlyOverTarget(__instance, missile, chute);
+            }
+            else if (HadTarget.Contains(id))
+            {
+                // The target was lost (destroyed or removed): open the chute right away.
+                chute.DeployChute();
+            }
         }
+
+        // Distance flown so far and missiles that have had a target, per missile (instance IDs are unique per object).
+        private static readonly System.Collections.Generic.Dictionary<int, float> DistanceFlown =
+            new System.Collections.Generic.Dictionary<int, float>();
+        private static readonly System.Collections.Generic.HashSet<int> HadTarget = new System.Collections.Generic.HashSet<int>();
 
         // Missiles whose antennas have already been told to unfold (instance IDs are unique per object).
         private static readonly System.Collections.Generic.HashSet<int> AntennasOut = new System.Collections.Generic.HashSet<int>();
@@ -141,6 +175,9 @@ namespace HangballMkII
         {
             if (rb == null)
                 return;
+            Vector3 spin = rb.angularVelocity;
+            spin.y *= 1f - Plugin.HangSpinKill;
+            rb.angularVelocity = spin;
             Vector3 tilt = Vector3.Cross(rb.transform.forward, Vector3.down);
             rb.AddTorque(tilt * Plugin.HangAlignAccel - rb.angularVelocity * Plugin.HangDamping, ForceMode.Acceleration);
         }
@@ -178,6 +215,51 @@ namespace HangballMkII
             Parachute chute = Plugin.FindChute(__instance);
             if (chute != null && chute.IsOpen())
                 InputsRef(__instance) = Vector3.zero;
+        }
+    }
+
+    // The stock chute aims the canopy and lines using the missile's nose as the "up" hint. Hanging nose-down that hint is
+    // parallel to the lines, so the canopy and lines spin visually. Re-aim them using a fixed world direction instead.
+    internal static class ChuteVisuals
+    {
+        private static System.Reflection.FieldInfo canopyField;
+        private static System.Reflection.FieldInfo linesField;
+
+        internal static void Patch(Harmony harmony, BepInEx.Logging.ManualLogSource log)
+        {
+            canopyField = AccessTools.Field(typeof(Parachute), "canopy");
+            linesField = AccessTools.Field(typeof(Parachute), "lines");
+            if (canopyField == null || linesField == null)
+            {
+                log.LogWarning("Parachute canopy/lines fields not found; chute visuals left stock");
+                return;
+            }
+            var postfix = new HarmonyMethod(typeof(ChuteVisuals), nameof(Postfix));
+            foreach (string name in new[] { "FixedUpdate", "Update", "LateUpdate" })
+            {
+                var method = AccessTools.DeclaredMethod(typeof(Parachute), name);
+                if (method != null)
+                    harmony.Patch(method, postfix: postfix);
+            }
+        }
+
+        private static Transform AsTransform(object value)
+        {
+            if (value is Component component)
+                return component.transform;
+            return (value as GameObject)?.transform;
+        }
+
+        private static void Postfix(Parachute __instance)
+        {
+            if (__instance == null || __instance.GetComponentInParent<Missile>() == null)
+                return;
+            Transform canopy = AsTransform(canopyField.GetValue(__instance));
+            Transform lines = AsTransform(linesField.GetValue(__instance));
+            if (canopy != null)
+                canopy.LookAt(__instance.transform.position, Vector3.forward);
+            if (canopy != null && lines != null)
+                lines.LookAt(canopy.position, Vector3.forward);
         }
     }
 }
