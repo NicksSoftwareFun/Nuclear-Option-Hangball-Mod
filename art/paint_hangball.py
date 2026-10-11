@@ -27,10 +27,10 @@ def gunmetal(w, h, level=55):
                         .resize((w, h), Image.BILINEAR), np.float32)[:, :w] / 128 - 3
     img = Image.fromarray(a.clip(0, 255).astype(np.uint8)).convert('RGB')
     d = ImageDraw.Draw(img)
-    for _ in range(w * h // 9000):
+    for _ in range(w * h // 20000):
         x, y = random.randint(0, w), random.randint(0, h)
         ang, ln = random.uniform(0, math.pi), random.randint(4, 22)
-        c = level + random.randint(12, 28)
+        c = level + random.randint(6, 14)
         d.line((x, y, x + ln * math.cos(ang), y + ln * math.sin(ang)), fill=(c, c, c), width=1)
     return img.filter(ImageFilter.GaussianBlur(0.4))
 
@@ -207,8 +207,7 @@ x0, y0, x1, y1 = box(WIRE)
 draw.rectangle((x0, y0, x1, y1), fill=(150, 152, 155))
 mdraw.rectangle((x0, y0, x1, y1), fill=(220, 220, 220, 160))
 
-# ---- weathering over the painted metal: grime, streaks along the length, chipped paint down to bare steel,
-# scratches and pitting. Strength per region; the wire and the dome lenses get little or none.
+# ---- weathering over the painted metal: grime, streaks along the length, light scratches and shallow dents. Strength per region; the wire and the dome lenses get little or none.
 A = np.asarray(albedo, np.float32).copy()
 M = np.asarray(metal, np.float32).copy()
 H = np.zeros((S, S), np.float32)          # height for the normal map, 0 = painted surface
@@ -221,34 +220,20 @@ for region, k in WEATHER:
     grime = np.clip(0.55 * noise(w, h, 40) + 0.3 * noise(w, h, 10) + 0.45 * noise(w, h, 6, 70) - 0.05, 0, 1)
     a *= (1 - 0.45 * k * grime)[..., None]
     m[..., 3] -= 60 * k * grime                     # grime is rougher
-    # chipped paint: bare steel showing through, clustered along a noise field
-    field = noise(w, h, 60) * 0.5 + noise(w, h, 9) * 0.35 + noise(w, h, 3) * 0.25
-    chip = field > (0.62 - 0.08 * k)
-    rim = (field > (0.57 - 0.08 * k)) & ~chip       # dark lip round each chip
-    steel = 118 + 18 * noise(w, h, 4)
-    a[chip] = np.stack([steel[chip] * 0.98, steel[chip], steel[chip] * 1.03], -1)
-    a[rim] *= 0.55
-    m[chip] = (210, 210, 210, 150)
-    hh[chip] -= 0.6
-    # pitting
-    n_pits = int(w * h * 0.0025 * k)
-    py, px = rng.integers(0, h, n_pits), rng.integers(0, w, n_pits)
-    a[py, px] *= 0.5
-    hh[py, px] -= 0.8
     # scratches: thin bright lines through the paint
     scr = Image.new('L', (w, h), 0)
     sd = ImageDraw.Draw(scr)
-    for _ in range(int(w * h / 1800 * k)):
+    for _ in range(int(w * h / 5000 * k)):
         x, y = random.uniform(0, w), random.uniform(0, h)
         ang = random.gauss(math.pi / 2, 0.5) if random.random() < 0.6 else random.uniform(0, math.pi)
         ln = random.uniform(6, 60)
-        sd.line((x, y, x + ln * math.cos(ang), y + ln * math.sin(ang)), fill=random.randint(90, 255), width=1)
+        sd.line((x, y, x + ln * math.cos(ang), y + ln * math.sin(ang)), fill=random.randint(60, 160), width=1)
     sv = np.asarray(scr, np.float32) / 255
-    a += (sv * 70)[..., None]
-    m[..., 0] += sv * 150
-    hh -= sv * 0.5
+    a += (sv * 30)[..., None]
+    m[..., 0] += sv * 60
+    hh -= sv * 0.25
     # dents: broad, shallow
-    hh += 1.2 * k * noise(w, h, 28)
+    hh += 0.8 * k * noise(w, h, 28)
 A = np.clip(A, 0, 255)
 M = np.clip(M, 0, 255)
 albedo = Image.fromarray(A.astype(np.uint8))
