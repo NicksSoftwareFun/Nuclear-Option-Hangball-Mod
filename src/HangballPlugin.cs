@@ -6,7 +6,7 @@ namespace HangballMkII
 {
     // Carries the Hangball Mk.II bundle (embedded .nobp, loaded by Blueprinter) plus the runtime patches. Only affects missiles that carry a Parachute
     // child and use OpticalSeeker (the Hangball); stock weapons are untouched.
-    [BepInPlugin("nick.nuclearoption.hangballmkii", "Hangball Mk.II", "0.5.5")]
+    [BepInPlugin("nick.nuclearoption.hangballmkii", "Hangball Mk.II", "0.5.6")]
     [BepInDependency("com.nikkorap.blueprinter", BepInDependency.DependencyFlags.SoftDependency)]
     public class Plugin : BaseUnityPlugin
     {
@@ -25,8 +25,8 @@ namespace HangballMkII
         // belly toward the lines (it is written for bombs that hang level), which makes a nose-down missile keep yawing.
         internal const float HangSpinKill = 0.8f;
 
-        // With no target selected, the chute opens after the missile has flown this far (m).
-        internal const float NoTargetDeployDistance = 15000f;
+        // The chute opens once the missile has flown this far (m), with or without a target.
+        internal const float ChuteDeployDistance = 15000f;
 
         private void Awake()
         {
@@ -89,7 +89,8 @@ namespace HangballMkII
     }
 
     // Runs every physics step on the host in place of / after the stock guidance.
-    // Before the chute opens: with a target selected, steer to a point above it and open the chute after passing over it.
+    // Before the chute opens: open it after 15 km of flight, or right away if the target is lost. With a target selected,
+    // steer to a point above it and open the chute after passing over it.
     // After the chute opens: the stock seeker is skipped entirely. It would keep re-checking line of sight to the target
     // while the missile swings, dropping and re-acquiring it and steering the fins toward it, which kept the missile
     // flopping under the chute. Instead the missile just hangs, and self-destructs on reaching the ground.
@@ -139,25 +140,33 @@ namespace HangballMkII
             if (chute == null || chute.IsOpen())
                 return;
 
-            if (TargetRef(__instance) != null)
-                FlyOverTarget(__instance, missile, chute);
-            else
-                DeployAfterDistance(missile, chute);
-        }
-
-        // Distance flown with no target selected, per missile (instance IDs are unique per object).
-        private static readonly System.Collections.Generic.Dictionary<int, float> DistanceFlown =
-            new System.Collections.Generic.Dictionary<int, float>();
-
-        private static void DeployAfterDistance(Missile missile, Parachute chute)
-        {
             int id = missile.GetInstanceID();
             DistanceFlown.TryGetValue(id, out float flown);
             flown += missile.speed * Time.fixedDeltaTime;
             DistanceFlown[id] = flown;
-            if (flown >= Plugin.NoTargetDeployDistance)
+            if (flown >= Plugin.ChuteDeployDistance)
+            {
                 chute.DeployChute();
+                return;
+            }
+
+            Unit target = TargetRef(__instance);
+            if (target != null && !target.disabled)
+            {
+                HadTarget.Add(id);
+                FlyOverTarget(__instance, missile, chute);
+            }
+            else if (HadTarget.Contains(id))
+            {
+                // The target was lost (destroyed or removed): open the chute right away.
+                chute.DeployChute();
+            }
         }
+
+        // Distance flown so far and missiles that have had a target, per missile (instance IDs are unique per object).
+        private static readonly System.Collections.Generic.Dictionary<int, float> DistanceFlown =
+            new System.Collections.Generic.Dictionary<int, float>();
+        private static readonly System.Collections.Generic.HashSet<int> HadTarget = new System.Collections.Generic.HashSet<int>();
 
         // Missiles whose antennas have already been told to unfold (instance IDs are unique per object).
         private static readonly System.Collections.Generic.HashSet<int> AntennasOut = new System.Collections.Generic.HashSet<int>();
