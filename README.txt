@@ -20,14 +20,4 @@ When a target is selected, it flies over the target and deploys a parachute, han
 4. 
 ## What the plugin does
 
-`src/HangballPlugin.cs` is the full source. It only affects missiles that use an optical seeker and carry a parachute (the Hangball). Stock weapons are untouched.
-
-- Opens the chute where the stock seeker would self-destruct.
-- With a target selected, steers to 1000 m above the target and opens the chute after passing over it.
-- Holds the antennas stowed until the chute is open, then unfolds them.
-- Torques the missile nose-down under the chute and damps the swing.
-- Detonates on touchdown.
-
-## Credits and licence
-
-See [CREDITS.txt](CREDITS.txt). The plugin source and art scripts are released under the [MIT License](LICENSE).
+`src/HangballPlugin.cs` is the full source. It only affects missiles that use an optical seeker and carry a parachute (the Hangball)
